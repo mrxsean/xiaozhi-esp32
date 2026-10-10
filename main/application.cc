@@ -661,6 +661,24 @@ void Application::ToggleChatState() {
     xEventGroupSetBits(event_group_, MAIN_EVENT_TOGGLE_CHAT);
 }
 
+void Application::EndConversation() {
+    Schedule([this]() {
+        auto state = GetDeviceState();
+        if (state != kDeviceStateConnecting && state != kDeviceStateListening &&
+            state != kDeviceStateSpeaking) {
+            return;
+        }
+        if (state == kDeviceStateSpeaking) {
+            AbortSpeaking(kAbortReasonNone);
+        }
+        audio_service_.ResetDecoder();
+        if (protocol_ && protocol_->IsAudioChannelOpened()) {
+            protocol_->CloseAudioChannel();
+        }
+        SetDeviceState(kDeviceStateIdle);
+    });
+}
+
 void Application::StartListening() {
     xEventGroupSetBits(event_group_, MAIN_EVENT_START_LISTENING);
 }
@@ -839,6 +857,7 @@ void Application::HandleStateChangedEvent() {
     auto display = board.GetDisplay();
     auto led = board.GetLed();
     led->OnStateChanged();
+    display->OnDeviceStateChanged(new_state);
     
     switch (new_state) {
         case kDeviceStateUnknown:

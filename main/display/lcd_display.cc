@@ -385,7 +385,7 @@ void LcdDisplay::SetupUI() {
     top_bar_ = lv_obj_create(container_);
     lv_obj_set_size(top_bar_, LV_HOR_RES, LV_SIZE_CONTENT);
     lv_obj_set_style_radius(top_bar_, 0, 0);
-    lv_obj_set_style_bg_opa(top_bar_, LV_OPA_50, 0);  // 50% opacity background
+    lv_obj_set_style_bg_opa(top_bar_, LV_OPA_10, 0);  // 50% opacity background
     lv_obj_set_style_bg_color(top_bar_, lvgl_theme->background_color(), 0);
     lv_obj_set_style_border_width(top_bar_, 0, 0);
     lv_obj_set_style_pad_all(top_bar_, 0, 0);
@@ -842,7 +842,7 @@ void LcdDisplay::SetupUI() {
     top_bar_ = lv_obj_create(screen);
     lv_obj_set_size(top_bar_, LV_HOR_RES, LV_SIZE_CONTENT);
     lv_obj_set_style_radius(top_bar_, 0, 0);
-    lv_obj_set_style_bg_opa(top_bar_, LV_OPA_50, 0);  // 50% opacity background
+    lv_obj_set_style_bg_opa(top_bar_, LV_OPA_10, 0);  // 50% opacity background
     lv_obj_set_style_bg_color(top_bar_, lvgl_theme->background_color(), 0);
     lv_obj_set_style_border_width(top_bar_, 0, 0);
     lv_obj_set_style_pad_all(top_bar_, 0, 0);
@@ -1083,8 +1083,8 @@ void LcdDisplay::SetTheme(Theme* theme) {
     
     auto lvgl_theme = static_cast<LvglTheme*>(theme);
     
-    // Get the active screen
-    lv_obj_t* screen = lv_screen_active();
+    // A board may show a separate idle screen; apply chat themes to this UI's screen.
+    lv_obj_t* screen = container_ ? lv_obj_get_screen(container_) : lv_screen_active();
 
     // Set font
     auto text_font = lvgl_theme->text_font()->font();
@@ -1115,7 +1115,7 @@ void LcdDisplay::SetTheme(Theme* theme) {
     
     // Update top bar background color with 50% opacity
     if (top_bar_ != nullptr) {
-        lv_obj_set_style_bg_opa(top_bar_, LV_OPA_50, 0);
+        lv_obj_set_style_bg_opa(top_bar_, LV_OPA_10, 0);
         lv_obj_set_style_bg_color(top_bar_, lvgl_theme->background_color(), 0);
     }
     
@@ -1208,7 +1208,7 @@ void LcdDisplay::SetTheme(Theme* theme) {
     
     // Update bottom bar background color with 50% opacity
     if (bottom_bar_ != nullptr) {
-        lv_obj_set_style_bg_opa(bottom_bar_, LV_OPA_50, 0);
+        lv_obj_set_style_bg_opa(bottom_bar_, LV_OPA_10, 0);
         lv_obj_set_style_bg_color(bottom_bar_, lvgl_theme->background_color(), 0);
     }
 #endif

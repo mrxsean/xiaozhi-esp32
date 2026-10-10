@@ -91,6 +91,9 @@ public:
      */
     void ToggleChatState();
 
+    // End a voice conversation on the main task and return to the idle display.
+    void EndConversation();
+
     /**
      * Start listening (event-based, thread-safe)
      * Sends MAIN_EVENT_START_LISTENING to be handled in Run()

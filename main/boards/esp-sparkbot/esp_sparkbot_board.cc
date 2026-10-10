@@ -1,6 +1,8 @@
 #include "wifi_board.h"
 #include "codecs/es8311_audio_codec.h"
 #include "display/lcd_display.h"
+#include "controller_display.h"
+#include "xkq_hardware.h"
 #include "application.h"
 #include "button.h"
 #include "config.h"
@@ -114,9 +116,9 @@ private:
         
         esp_lcd_panel_reset(panel);
         esp_lcd_panel_init(panel);
-        esp_lcd_panel_invert_color(panel, true);
+        esp_lcd_panel_invert_color(panel, false);
         esp_lcd_panel_disp_on_off(panel, true);
-        display_ = new SpiLcdDisplay(panel_io, panel,
+        display_ = new ControllerDisplay(panel_io, panel,
                                     DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_OFFSET_X, DISPLAY_OFFSET_Y, DISPLAY_MIRROR_X, DISPLAY_MIRROR_Y, DISPLAY_SWAP_XY);
     }
 
@@ -125,24 +127,71 @@ private:
         // 开机
         mcp_server.AddTool(
             "self.ac.power_on",
-            "开机",
+            "打开地址1的空调/热泵，通过485发送；返回排队状态，实际结果请查询状态",
             PropertyList(),
-            [this](const PropertyList&) {
-                //开机指令
-                return true;
-            }
-        );
+            [](const PropertyList&) -> ReturnValue {
+                return std::string(XkqHardware::GetInstance().Set(0, XkqHardware::Field::Power, 1)
+                                       ? "指令已排队，等待设备响应"
+                                       : "设备未连接或正在处理，未执行");
+            });
 
         // 关机
         mcp_server.AddTool(
             "self.ac.power_off",
-            "关机",
+            "关闭地址1的空调/热泵，通过485发送；返回排队状态，实际结果请查询状态",
             PropertyList(),
-            [this](const PropertyList&) {
-                //关机指令
-                return true;
-            }
-        );
+            [](const PropertyList&) -> ReturnValue {
+                return std::string(XkqHardware::GetInstance().Set(0, XkqHardware::Field::Power, 0)
+                                       ? "指令已排队，等待设备响应"
+                                       : "设备未连接或正在处理，未执行");
+            });
+
+        mcp_server.AddTool(
+            "self.ac.get_state",
+            "读取当前485设备的真实状态，设备地址为1",
+            PropertyList({Property("device", kPropertyTypeInteger, 1, 1, 1)}),
+            [](const PropertyList& p) -> ReturnValue {
+                auto s = XkqHardware::GetInstance().GetState(p["device"].value<int>() - 1);
+                cJSON* result = cJSON_CreateObject();
+                cJSON_AddBoolToObject(result, "online", s.online);
+                cJSON_AddBoolToObject(result, "pending", s.pending);
+                cJSON_AddBoolToObject(result, "write_failed", s.write_failed);
+                if (s.online) {
+                    cJSON_AddBoolToObject(result, "power", s.power);
+                    cJSON_AddNumberToObject(result, "mode", s.mode);
+                    cJSON_AddNumberToObject(result, "temperature", s.temperature / 10.0);
+                    cJSON_AddNumberToObject(result, "outlet", s.outlet / 10.0);
+                    cJSON_AddNumberToObject(result, "inlet", s.inlet / 10.0);
+                    cJSON_AddNumberToObject(result, "ambient", s.ambient / 10.0);
+                    cJSON_AddNumberToObject(result, "error_code", s.error);
+                }
+                return result;
+            });
+        mcp_server.AddTool(
+            "self.ac.set_temperature",
+            "设置485设备温度，制冷5至25度，制热25至55度；返回排队状态",
+            PropertyList({Property("temperature", kPropertyTypeInteger, 5, 55),
+                          Property("device", kPropertyTypeInteger, 1, 1, 1)}),
+            [](const PropertyList& p) -> ReturnValue {
+                return std::string(
+                    XkqHardware::GetInstance().Set(p["device"].value<int>() - 1,
+                                                   XkqHardware::Field::Temperature,
+                                                   p["temperature"].value<int>() * 10)
+                        ? "指令已排队，等待设备响应"
+                        : "未执行：设备离线、忙或温度超出当前模式范围");
+            });
+        mcp_server.AddTool(
+            "self.ac.set_mode",
+            "设置485设备模式：0制热、1制冷、5送风、6除湿；返回排队状态",
+            PropertyList({Property("mode", kPropertyTypeInteger, 0, 6),
+                          Property("device", kPropertyTypeInteger, 1, 1, 1)}),
+            [](const PropertyList& p) -> ReturnValue {
+                return std::string(XkqHardware::GetInstance().Set(p["device"].value<int>() - 1,
+                                                                  XkqHardware::Field::Mode,
+                                                                  p["mode"].value<int>())
+                                       ? "指令已排队，等待设备响应"
+                                       : "未执行：设备离线、忙或模式不支持");
+            });
 
         // //获取开关机状态
         // mcp_server.AddTool(
@@ -210,6 +259,11 @@ public:
         InitializeSpi();
         InitializeDisplay();
         InitializeButtons();
+        XkqHardware::GetInstance().Start([this](uint16_t key) {
+            Application::GetInstance().Schedule([this, key]() {
+                static_cast<ControllerDisplay*>(display_)->HandleKey(key);
+            });
+        });
         InitializeTools();
         GetBacklight()->RestoreBrightness();
     }
